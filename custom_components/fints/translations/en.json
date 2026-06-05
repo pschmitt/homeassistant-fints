@@ -2,8 +2,15 @@
   "config": {
     "step": {
       "user": {
-        "title": "Add FinTS bank connection",
-        "description": "Connect Home Assistant to your bank via FinTS/HBCI. You need a FinTS product ID (Produktkennung) registered with your bank.",
+        "title": "Select your bank",
+        "description": "Choose your bank to pre-fill the connection settings, or select **Other / Custom** to enter them manually.",
+        "data": {
+          "bank_preset": "Bank"
+        }
+      },
+      "credentials": {
+        "title": "Connect to {bank}",
+        "description": "Enter your online banking credentials. You need a FinTS product ID (Produktkennung) registered with your bank.",
         "data": {
           "blz": "Bank routing number (BLZ)",
           "username": "Username / Customer number",
@@ -13,13 +20,13 @@
           "name": "Name (optional)"
         },
         "data_description": {
-          "blz": "The 8-digit German bank routing number, e.g. 50010517 for ING.",
-          "endpoint": "The bank's FinTS server URL, e.g. https://fints.ing.de/fints",
+          "blz": "The 8-digit German bank routing number.",
+          "endpoint": "The bank's FinTS/HBCI server URL.",
           "product_id": "Your registered FinTS product ID. Must be obtained from your bank."
         }
       },
       "reconfigure": {
-        "title": "Reconfigure FinTS bank connection",
+        "title": "Reconfigure FinTS connection",
         "description": "Update the connection settings. Leave PIN empty to keep the current one.",
         "data": {
           "blz": "Bank routing number (BLZ)",
@@ -48,7 +55,7 @@
           "scan_interval": "Update interval (seconds)"
         },
         "data_description": {
-          "scan_interval": "How often to poll your bank for updated balances. Minimum 300 seconds (5 minutes). Default is 3600 (1 hour) to avoid excessive requests."
+          "scan_interval": "How often to poll your bank for updated balances. Minimum 300 s (5 min). Default is 3600 s (1 h)."
         }
       }
     }

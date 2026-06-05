@@ -5,10 +5,10 @@ from __future__ import annotations
 import logging
 from datetime import timedelta
 
-from homeassistant.components.repairs import IssueSeverity, async_create_issue, async_delete_issue
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.const import CONF_SCAN_INTERVAL
 from homeassistant.core import HomeAssistant
+from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import FinTSAccountData, FinTSApiClient
@@ -51,12 +51,12 @@ class FinTSCoordinator(DataUpdateCoordinator[dict[str, FinTSAccountData]]):
                 self.client.fetch_accounts_and_balances
             )
         except FinTSAuthError as err:
-            async_create_issue(
+            ir.async_create_issue(
                 self.hass,
                 DOMAIN,
                 f"{REPAIR_AUTH_FAILED}_{self.config_entry.entry_id}",
                 is_fixable=False,
-                severity=IssueSeverity.ERROR,
+                severity=ir.IssueSeverity.ERROR,
                 translation_key=REPAIR_AUTH_FAILED,
                 translation_placeholders={"bank_name": self.bank_name},
             )
@@ -64,7 +64,7 @@ class FinTSCoordinator(DataUpdateCoordinator[dict[str, FinTSAccountData]]):
         except FinTSConnectionError as err:
             raise UpdateFailed(f"FinTS connection error for {self.bank_name}: {err}") from err
 
-        async_delete_issue(
+        ir.async_delete_issue(
             self.hass,
             DOMAIN,
             f"{REPAIR_AUTH_FAILED}_{self.config_entry.entry_id}",
