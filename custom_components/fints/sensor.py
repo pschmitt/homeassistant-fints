@@ -64,7 +64,7 @@ class FinTSBalanceSensor(FinTSEntity, SensorEntity):
         super().__init__(coordinator)
         self._iban = account.iban
         self._attr_unique_id = f"{coordinator.config_entry.entry_id}:{account.iban}:balance"
-        self._attr_name = account.iban_formatted
+        self._attr_name = account.product_name or account.iban_formatted
         self._attr_native_unit_of_measurement = account.currency
 
     @property

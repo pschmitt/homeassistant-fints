@@ -20,6 +20,7 @@ class FinTSAccountData:
     account_number: str
     balance: Decimal
     currency: str
+    product_name: str = ""
 
     @property
     def iban_formatted(self) -> str:
@@ -76,9 +77,14 @@ class FinTSApiClient:
         try:
             client = self._make_client()
             with client:
-                accounts = client.get_sepa_accounts()
+                info = client.get_information()
+                product_names: dict[str, str] = {
+                    acc["iban"]: acc.get("product_name") or ""
+                    for acc in info.get("accounts", [])
+                }
+                sepa_accounts = client.get_sepa_accounts()
                 result: dict[str, FinTSAccountData] = {}
-                for acc in accounts:
+                for acc in sepa_accounts:
                     try:
                         balance = client.get_balance(acc)
                         result[acc.iban] = FinTSAccountData(
@@ -87,6 +93,7 @@ class FinTSApiClient:
                             account_number=acc.accountnumber or "",
                             balance=balance.amount.amount,
                             currency=balance.amount.currency,
+                            product_name=product_names.get(acc.iban, ""),
                         )
                     except Exception as exc:
                         _LOGGER.warning(
