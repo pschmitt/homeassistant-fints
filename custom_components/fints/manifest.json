@@ -1,0 +1,19 @@
+{
+  "domain": "fints",
+  "name": "FinTS",
+  "codeowners": [
+    "@pschmitt"
+  ],
+  "config_flow": true,
+  "documentation": "https://github.com/pschmitt/homeassistant-fints",
+  "integration_type": "hub",
+  "iot_class": "cloud_polling",
+  "issue_tracker": "https://github.com/pschmitt/homeassistant-fints/issues",
+  "loggers": [
+    "custom_components.fints"
+  ],
+  "requirements": [
+    "fints>=3.2"
+  ],
+  "version": "0.1.0"
+}

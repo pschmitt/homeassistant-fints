@@ -1,0 +1,62 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Add FinTS bank connection",
+        "description": "Connect Home Assistant to your bank via FinTS/HBCI. You need a FinTS product ID (Produktkennung) registered with your bank.",
+        "data": {
+          "blz": "Bank routing number (BLZ)",
+          "username": "Username / Customer number",
+          "password": "PIN",
+          "endpoint": "FinTS endpoint URL",
+          "product_id": "Product ID (Produktkennung)",
+          "name": "Name (optional)"
+        },
+        "data_description": {
+          "blz": "The 8-digit German bank routing number, e.g. 50010517 for ING.",
+          "endpoint": "The bank's FinTS server URL, e.g. https://fints.ing.de/fints",
+          "product_id": "Your registered FinTS product ID. Must be obtained from your bank."
+        }
+      },
+      "reconfigure": {
+        "title": "Reconfigure FinTS bank connection",
+        "description": "Update the connection settings. Leave PIN empty to keep the current one.",
+        "data": {
+          "blz": "Bank routing number (BLZ)",
+          "username": "Username / Customer number",
+          "password": "PIN",
+          "endpoint": "FinTS endpoint URL",
+          "product_id": "Product ID (Produktkennung)"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Failed to connect to the FinTS server. Check the endpoint URL.",
+      "invalid_auth": "Authentication failed. Verify your PIN and username. Some banks also require a fresh web portal login — try logging into your bank's website first.",
+      "unknown": "Unexpected error. Check the logs for details."
+    },
+    "abort": {
+      "already_configured": "This bank connection is already configured.",
+      "reconfigure_successful": "Configuration updated successfully."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "FinTS options",
+        "data": {
+          "scan_interval": "Update interval (seconds)"
+        },
+        "data_description": {
+          "scan_interval": "How often to poll your bank for updated balances. Minimum 300 seconds (5 minutes). Default is 3600 (1 hour) to avoid excessive requests."
+        }
+      }
+    }
+  },
+  "issues": {
+    "auth_failed": {
+      "title": "FinTS authentication failed for {bank_name}",
+      "description": "Home Assistant could not log in to **{bank_name}** via FinTS.\n\nPossible causes:\n\n1. **Stale web session**: Some banks (e.g. ING) periodically require you to log into their web portal before FinTS access is re-enabled. Visit your bank's website, log in, then reload this integration.\n2. **Changed PIN**: If you recently changed your online banking PIN, use **Reconfigure** to update it.\n\nAfter resolving the issue, go to **Settings → Devices & services → {bank_name}** and select **Reload**."
+    }
+  }
+}
