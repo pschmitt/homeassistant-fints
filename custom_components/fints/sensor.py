@@ -54,6 +54,9 @@ class FinTSBalanceSensor(FinTSEntity, SensorEntity):
     _attr_state_class = SensorStateClass.MEASUREMENT
     _attr_suggested_display_precision = 2
     _attr_icon = "mdi:bank-outline"
+    # Exclude transactions from the recorder — they change on every balance update
+    # and storing lists in the history DB causes significant bloat.
+    _unrecorded_attributes = frozenset({"transactions"})
 
     def __init__(
         self,
@@ -85,7 +88,7 @@ class FinTSBalanceSensor(FinTSEntity, SensorEntity):
 
     @property
     def extra_state_attributes(self) -> dict[str, Any]:
-        """Return IBAN, BIC, and account number as attributes."""
+        """Return IBAN, BIC, account number, and recent transactions as attributes."""
         account = self._account
         if account is None:
             return {}
@@ -94,4 +97,5 @@ class FinTSBalanceSensor(FinTSEntity, SensorEntity):
             attrs["bic"] = account.bic
         if account.account_number:
             attrs["account_number"] = account.account_number
+        attrs["transactions"] = account.transactions
         return attrs

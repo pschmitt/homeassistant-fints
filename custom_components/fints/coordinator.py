@@ -45,10 +45,11 @@ class FinTSCoordinator(DataUpdateCoordinator[dict[str, FinTSAccountData]]):
         return self.config_entry.title
 
     async def _async_update_data(self) -> dict[str, FinTSAccountData]:
-        """Fetch account balances from the bank."""
+        """Fetch account balances and transactions from the bank."""
+        previous = self.data
         try:
             data = await self.hass.async_add_executor_job(
-                self.client.fetch_accounts_and_balances
+                self.client.fetch_data, previous
             )
         except FinTSAuthError as err:
             ir.async_create_issue(
