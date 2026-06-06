@@ -51,7 +51,7 @@ class FinTSBalanceSensor(FinTSEntity, SensorEntity):
     """Sensor representing the current balance of one bank account."""
 
     _attr_device_class = SensorDeviceClass.MONETARY
-    _attr_state_class = SensorStateClass.MEASUREMENT
+    _attr_state_class = SensorStateClass.TOTAL
     _attr_suggested_display_precision = 2
     _attr_icon = "mdi:bank-outline"
     # Exclude transactions from the recorder — they change on every balance update
