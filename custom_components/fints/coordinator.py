@@ -12,8 +12,13 @@ from homeassistant.helpers import issue_registry as ir
 from homeassistant.helpers.update_coordinator import DataUpdateCoordinator, UpdateFailed
 
 from .api import FinTSAccountData, FinTSApiClient
-from .const import DEFAULT_SCAN_INTERVAL, DOMAIN, REPAIR_AUTH_FAILED
-from .exceptions import FinTSAuthError, FinTSConnectionError
+from .const import (
+    DEFAULT_SCAN_INTERVAL,
+    DOMAIN,
+    REPAIR_AUTH_FAILED,
+    REPAIR_SCA_REQUIRED,
+)
+from .exceptions import FinTSAuthError, FinTSConnectionError, FinTSTanRequiredError
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -51,7 +56,30 @@ class FinTSCoordinator(DataUpdateCoordinator[dict[str, FinTSAccountData]]):
             data = await self.hass.async_add_executor_job(
                 self.client.fetch_data, previous
             )
+        except FinTSTanRequiredError as err:
+            ir.async_delete_issue(
+                self.hass,
+                DOMAIN,
+                f"{REPAIR_AUTH_FAILED}_{self.config_entry.entry_id}",
+            )
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                f"{REPAIR_SCA_REQUIRED}_{self.config_entry.entry_id}",
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key=REPAIR_SCA_REQUIRED,
+                translation_placeholders={"bank_name": self.bank_name},
+            )
+            raise UpdateFailed(
+                f"TAN/SCA approval required for {self.bank_name}: {err}"
+            ) from err
         except FinTSAuthError as err:
+            ir.async_delete_issue(
+                self.hass,
+                DOMAIN,
+                f"{REPAIR_SCA_REQUIRED}_{self.config_entry.entry_id}",
+            )
             ir.async_create_issue(
                 self.hass,
                 DOMAIN,
@@ -69,5 +97,10 @@ class FinTSCoordinator(DataUpdateCoordinator[dict[str, FinTSAccountData]]):
             self.hass,
             DOMAIN,
             f"{REPAIR_AUTH_FAILED}_{self.config_entry.entry_id}",
+        )
+        ir.async_delete_issue(
+            self.hass,
+            DOMAIN,
+            f"{REPAIR_SCA_REQUIRED}_{self.config_entry.entry_id}",
         )
         return data

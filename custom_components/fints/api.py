@@ -8,11 +8,22 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
-from .exceptions import FinTSAuthError, FinTSConnectionError
+from .exceptions import FinTSAuthError, FinTSConnectionError, FinTSTanRequiredError
 
 _LOGGER = logging.getLogger(__name__)
 
 _TRANSACTION_LOOKBACK_DAYS = 30
+_TAN_MECHANISM_LABELS = {
+    "900": "mobile TAN",
+    "910": "chipTAN",
+    "911": "chipTAN optical",
+    "912": "smsTAN",
+    "913": "photoTAN",
+    "914": "pushTAN",
+    "920": "BestSign",
+    "921": "BestSign Push",
+    "922": "BestSign SMS",
+}
 
 
 @dataclass
@@ -78,6 +89,8 @@ class FinTSApiClient:
         pin: str,
         endpoint: str,
         product_id: str,
+        tan_mechanism: str | None = None,
+        tan_medium: str | None = None,
     ) -> None:
         """Initialize the client."""
         self._blz = blz
@@ -85,21 +98,197 @@ class FinTSApiClient:
         self._pin = pin
         self._endpoint = endpoint
         self._product_id = product_id
+        self._tan_mechanism = tan_mechanism
+        self._tan_medium = tan_medium
 
     def _make_client(self):
         """Create and bootstrap a FinTS client."""
         from fints.client import FinTS3PinTanClient
-        from fints.utils import minimal_interactive_cli_bootstrap
 
         client = FinTS3PinTanClient(
             self._blz,
             self._username,
             self._pin,
             self._endpoint,
+            customer_id=self._username,
+            tan_medium=self._tan_medium or None,
             product_id=self._product_id,
         )
-        minimal_interactive_cli_bootstrap(client)
+        client.fetch_tan_mechanisms()
+        if self._tan_mechanism:
+            client.set_tan_mechanism(self._tan_mechanism)
         return client
+
+    @staticmethod
+    def _extract_tan_media_names(media: Any) -> set[str]:
+        """Extract medium/device names from a python-fints HKTAB response."""
+        names: set[str] = set()
+        if not media:
+            return names
+
+        for tan_medium in media[1]:
+            name = getattr(tan_medium, "tan_medium_name", "") or ""
+            if name:
+                names.add(name)
+        return names
+
+    @staticmethod
+    def _format_tan_mechanism_label(security_function: str, info: Any) -> str:
+        """Build a more human-friendly label for a TAN mechanism."""
+        bank_name = (getattr(info, "name", "") or "").strip()
+        friendly_name = _TAN_MECHANISM_LABELS.get(security_function, "").strip()
+
+        parts: list[str] = []
+        if bank_name:
+            parts.append(bank_name)
+        if friendly_name and friendly_name.lower() != bank_name.lower():
+            parts.append(friendly_name)
+
+        description = " / ".join(parts) or f"TAN method {security_function}"
+        return f"{description} ({security_function})"
+
+    @staticmethod
+    def _get_tan_media_with_skip_sca(client: Any) -> Any:
+        """Fetch TAN media like Hibiscus: fresh dialog, no HKTAN on init, then HKTAB."""
+        from fints.formals import TANMediaClass4, TANMediaType2
+        from fints.segments.auth import HKTAB4, HKTAB5
+
+        dialog = client._new_dialog(lazy_init=True)
+        hktab = client._find_highest_supported_command(HKTAB4, HKTAB5)
+        seg = hktab(
+            tan_media_type=TANMediaType2.ALL,
+            tan_media_class=str(TANMediaClass4.ALL),
+        )
+
+        saved_allowed = list(client.allowed_security_functions)
+        try:
+            # Hibiscus fetches TAN media in a dedicated dialog with "skip sca: true".
+            # python-fints otherwise injects an HKTAN into dialog init once mechanisms
+            # are known, which Norisbank rejects before returning HITAB media names.
+            client.allowed_security_functions = []
+            client._bootstrap_mode = True
+            with dialog:
+                dialog.init()
+                response = dialog.send(seg)
+        finally:
+            client.allowed_security_functions = saved_allowed
+            client._bootstrap_mode = False
+
+        for hitab in response.response_segments(seg, "HITAB"):
+            return hitab.tan_usage_option, list(hitab.tan_media_list)
+        return None
+
+    @classmethod
+    def discover_auth(
+        cls,
+        *,
+        blz: str,
+        username: str,
+        pin: str,
+        endpoint: str,
+        product_id: str,
+    ) -> dict[str, Any]:
+        """Discover available TAN mechanisms and, when possible, media names."""
+        from fints.client import FinTS3PinTanClient
+
+        client = FinTS3PinTanClient(
+            blz,
+            username,
+            pin,
+            endpoint,
+            customer_id=username,
+            product_id=product_id,
+        )
+        client.fetch_tan_mechanisms()
+
+        mechanisms = [
+            {
+                "value": key,
+                "label": cls._format_tan_mechanism_label(key, info),
+            }
+            for key, info in client.get_tan_mechanisms().items()
+        ]
+
+        tan_media_names: set[str] = set()
+        for key in client.get_tan_mechanisms():
+            probe = FinTS3PinTanClient(
+                blz,
+                username,
+                pin,
+                endpoint,
+                customer_id=username,
+                product_id=product_id,
+            )
+            probe.fetch_tan_mechanisms()
+            probe.set_tan_mechanism(key)
+            try:
+                media = probe.get_tan_media()
+            except Exception as exc:
+                _LOGGER.debug("Default TAN media fetch failed for %s: %s", key, exc)
+                try:
+                    media = cls._get_tan_media_with_skip_sca(probe)
+                except Exception as fallback_exc:
+                    _LOGGER.debug(
+                        "Skip-SCA TAN media fetch failed for %s: %s",
+                        key,
+                        fallback_exc,
+                    )
+                    continue
+            if not media:
+                continue
+            tan_media_names.update(cls._extract_tan_media_names(media))
+
+        return {
+            "mechanisms": mechanisms,
+            "current_mechanism": client.get_current_tan_mechanism() or "",
+            "tan_media_names": sorted(tan_media_names),
+        }
+
+    @staticmethod
+    def _accounts_from_information(info: dict[str, Any]) -> list[Any]:
+        """Build SEPA accounts from UPD metadata as a fallback."""
+        from fints.models import SEPAAccount
+
+        accounts: list[Any] = []
+        for raw_account in info.get("accounts", []):
+            iban = raw_account.get("iban")
+            account_number = raw_account.get("account_number")
+            bank_identifier = raw_account.get("bank_identifier")
+            bank_code = getattr(bank_identifier, "bank_code", None)
+            if not iban or not account_number or not bank_code:
+                continue
+
+            country = iban[:2] if len(iban) >= 2 else "DE"
+            accounts.append(
+                SEPAAccount(
+                    iban=iban,
+                    bic=raw_account.get("bic") or f"XXXX{country}XXX",
+                    accountnumber=account_number,
+                    subaccount=raw_account.get("subaccount_number") or "",
+                    blz=bank_code,
+                )
+            )
+        return accounts
+
+    def _get_accounts(self, client, info: dict[str, Any]) -> list[Any]:
+        """Get SEPA accounts, falling back to UPD metadata when HKSPA fails."""
+        try:
+            accounts = client.get_sepa_accounts()
+        except Exception as exc:
+            _LOGGER.warning("Falling back to UPD account data after HKSPA failure: %s", exc)
+            accounts = self._accounts_from_information(info)
+
+        if accounts:
+            return accounts
+        return self._accounts_from_information(info)
+
+    @staticmethod
+    def _raise_if_retry_response(value: Any) -> None:
+        """Raise a dedicated integration error for interactive TAN/SCA responses."""
+        from fints.client import NeedRetryResponse
+
+        if isinstance(value, NeedRetryResponse):
+            raise FinTSTanRequiredError("Bank requires interactive TAN/SCA approval")
 
     def fetch_data(
         self, previous: dict[str, FinTSAccountData] | None = None
@@ -117,15 +306,22 @@ class FinTSApiClient:
                 product_names: dict[str, str] = {
                     acc["iban"]: acc.get("product_name") or ""
                     for acc in info.get("accounts", [])
+                    if acc.get("iban")
                 }
-                sepa_accounts = client.get_sepa_accounts()
+                sepa_accounts = self._get_accounts(client, info)
                 result: dict[str, FinTSAccountData] = {}
 
                 for acc in sepa_accounts:
                     try:
                         balance = client.get_balance(acc)
+                        self._raise_if_retry_response(balance)
                     except Exception as exc:
+                        if isinstance(exc, FinTSTanRequiredError):
+                            raise
                         _LOGGER.warning("Failed to get balance for %s: %s", acc.iban, exc)
+                        continue
+                    if balance is None:
+                        _LOGGER.warning("No balance returned for %s", acc.iban)
                         continue
 
                     new_balance = balance.amount.amount
@@ -162,9 +358,15 @@ class FinTSApiClient:
 
                 return result
         except Exception as exc:
-            from fints.exceptions import FinTSClientPINError
+            from fints.exceptions import (
+                FinTSClientPINError,
+                FinTSClientTemporaryAuthError,
+                FinTSSCARequiredError,
+            )
 
-            if isinstance(exc, FinTSClientPINError):
+            if isinstance(exc, (FinTSTanRequiredError, FinTSSCARequiredError)):
+                raise FinTSTanRequiredError(str(exc)) from exc
+            if isinstance(exc, (FinTSClientPINError, FinTSClientTemporaryAuthError)):
                 raise FinTSAuthError(str(exc)) from exc
             raise FinTSConnectionError(str(exc)) from exc
 
@@ -173,7 +375,10 @@ class FinTSApiClient:
         try:
             start = date.today() - timedelta(days=_TRANSACTION_LOOKBACK_DAYS)
             raw = client.get_transactions(acc, start_date=start)
+            self._raise_if_retry_response(raw)
             return [_serialize_transaction(t) for t in raw]
+        except FinTSTanRequiredError:
+            raise
         except Exception as exc:
             _LOGGER.warning("Failed to get transactions for %s: %s", acc.iban, exc)
             return []

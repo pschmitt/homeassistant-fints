@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 from typing import Any
+from functools import partial
 
 import voluptuous as vol
 
@@ -27,6 +28,8 @@ from .const import (
     CONF_BLZ,
     CONF_ENDPOINT,
     CONF_PRODUCT_ID,
+    CONF_TAN_MECHANISM,
+    CONF_TAN_MEDIUM,
     DEFAULT_SCAN_INTERVAL,
     MIN_SCAN_INTERVAL,
     DOMAIN,
@@ -69,6 +72,11 @@ BANK_PRESETS: dict[str, dict[str, str]] = {
         CONF_BLZ: "20041111",
         CONF_ENDPOINT: "https://fints.comdirect.de/fints",
     },
+    "norisbank": {
+        "name": "norisbank",
+        CONF_BLZ: "10077777",
+        CONF_ENDPOINT: "https://fints.norisbank.de",
+    },
     PRESET_CUSTOM: {
         "name": "Other / Custom",
         CONF_BLZ: "",
@@ -80,6 +88,7 @@ PRESET_OPTIONS = [
     {"value": key, "label": info["name"]}
     for key, info in BANK_PRESETS.items()
 ]
+PRESET_OPTIONS.sort(key=lambda option: option["label"].casefold())
 
 
 async def _validate(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, str]:
@@ -90,6 +99,8 @@ async def _validate(hass: HomeAssistant, data: dict[str, Any]) -> dict[str, str]
         pin=data[CONF_PASSWORD],
         endpoint=data[CONF_ENDPOINT],
         product_id=data[CONF_PRODUCT_ID],
+        tan_mechanism=data.get(CONF_TAN_MECHANISM),
+        tan_medium=data.get(CONF_TAN_MEDIUM) or None,
     )
     accounts = await hass.async_add_executor_job(client.validate)
     return {
@@ -132,6 +143,11 @@ class FinTSConfigFlow(ConfigFlow, domain=DOMAIN):
         """Initialize the flow."""
         self._preset: str | None = None
         self._preset_data: dict[str, str] = {}
+        self._pending_data: dict[str, Any] = {}
+        self._pending_title: str = ""
+        self._mechanism_options: list[dict[str, str]] = []
+        self._tan_media_names: list[str] = []
+        self._current_mechanism: str = ""
 
     @staticmethod
     @callback
@@ -171,32 +187,42 @@ class FinTSConfigFlow(ConfigFlow, domain=DOMAIN):
         is_custom = self._preset == PRESET_CUSTOM
 
         if user_input is not None:
-            data = {
+            self._pending_data = {
                 CONF_BLZ: user_input.get(CONF_BLZ) or self._preset_data.get(CONF_BLZ, ""),
                 CONF_USERNAME: user_input[CONF_USERNAME],
                 CONF_PASSWORD: user_input[CONF_PASSWORD],
                 CONF_ENDPOINT: user_input.get(CONF_ENDPOINT) or self._preset_data.get(CONF_ENDPOINT, ""),
                 CONF_PRODUCT_ID: user_input[CONF_PRODUCT_ID],
             }
-            name = user_input.get(CONF_NAME) or self._preset_data.get("name") or data[CONF_BLZ]
+            self._pending_title = (
+                user_input.get(CONF_NAME)
+                or self._preset_data.get("name")
+                or self._pending_data[CONF_BLZ]
+            )
 
             try:
-                info = await _validate(self.hass, data)
+                auth_info = await self.hass.async_add_executor_job(
+                    partial(
+                        FinTSApiClient.discover_auth,
+                        blz=self._pending_data[CONF_BLZ],
+                        username=self._pending_data[CONF_USERNAME],
+                        pin=self._pending_data[CONF_PASSWORD],
+                        endpoint=self._pending_data[CONF_ENDPOINT],
+                        product_id=self._pending_data[CONF_PRODUCT_ID],
+                    ),
+                )
             except FinTSAuthError:
                 errors["base"] = "invalid_auth"
             except FinTSConnectionError:
                 errors["base"] = "cannot_connect"
             except Exception:
-                _LOGGER.exception("Unexpected exception during FinTS config validation")
+                _LOGGER.exception("Unexpected exception during FinTS auth discovery")
                 errors["base"] = "unknown"
             else:
-                await self.async_set_unique_id(info["unique_id"])
-                self._abort_if_unique_id_configured()
-                return self.async_create_entry(
-                    title=name,
-                    data=data,
-                    options={CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL},
-                )
+                self._mechanism_options = auth_info["mechanisms"]
+                self._tan_media_names = auth_info["tan_media_names"]
+                self._current_mechanism = auth_info["current_mechanism"]
+                return await self.async_step_auth()
 
         defaults = {**self._preset_data, **(user_input or {})}
         schema = _credentials_schema(
@@ -224,6 +250,88 @@ class FinTSConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
+    async def async_step_auth(
+        self, user_input: dict[str, Any] | None = None
+    ) -> ConfigFlowResult:
+        """Step 3: choose TAN mechanism and optional medium."""
+        errors: dict[str, str] = {}
+
+        if user_input is not None:
+            data = {
+                **self._pending_data,
+                CONF_TAN_MECHANISM: (user_input.get(CONF_TAN_MECHANISM) or "").strip(),
+                CONF_TAN_MEDIUM: (user_input.get(CONF_TAN_MEDIUM) or "").strip(),
+            }
+            try:
+                info = await _validate(self.hass, data)
+            except FinTSAuthError:
+                errors["base"] = "invalid_auth"
+            except FinTSConnectionError:
+                errors["base"] = "cannot_connect"
+            except Exception:
+                _LOGGER.exception("Unexpected exception during FinTS config validation")
+                errors["base"] = "unknown"
+            else:
+                await self.async_set_unique_id(info["unique_id"])
+                self._abort_if_unique_id_configured()
+                return self.async_create_entry(
+                    title=self._pending_title,
+                    data=data,
+                    options={CONF_SCAN_INTERVAL: DEFAULT_SCAN_INTERVAL},
+                )
+
+        defaults = {**self._pending_data, **(user_input or {})}
+        fields: dict[vol.Marker, Any] = {}
+
+        if self._mechanism_options:
+            fields[
+                vol.Optional(
+                    CONF_TAN_MECHANISM,
+                    default=defaults.get(CONF_TAN_MECHANISM, self._current_mechanism or ""),
+                )
+            ] = SelectSelector(
+                SelectSelectorConfig(
+                    options=self._mechanism_options,
+                    mode=SelectSelectorMode.LIST,
+                )
+            )
+        else:
+            fields[
+                vol.Optional(
+                    CONF_TAN_MECHANISM,
+                    default=defaults.get(CONF_TAN_MECHANISM, ""),
+                )
+            ] = TextSelector()
+
+        if self._tan_media_names:
+            fields[
+                vol.Optional(
+                    CONF_TAN_MEDIUM,
+                    default=defaults.get(
+                        CONF_TAN_MEDIUM,
+                        self._tan_media_names[0] if len(self._tan_media_names) == 1 else "",
+                    ),
+                )
+            ] = SelectSelector(
+                SelectSelectorConfig(
+                    options=self._tan_media_names,
+                    mode=SelectSelectorMode.DROPDOWN,
+                )
+            )
+        else:
+            fields[
+                vol.Optional(
+                    CONF_TAN_MEDIUM,
+                    default=defaults.get(CONF_TAN_MEDIUM, ""),
+                )
+            ] = TextSelector()
+
+        return self.async_show_form(
+            step_id="auth",
+            data_schema=vol.Schema(fields),
+            errors=errors,
+        )
+
     async def async_step_reconfigure(
         self, user_input: dict[str, Any] | None = None
     ) -> ConfigFlowResult:
@@ -234,6 +342,8 @@ class FinTSConfigFlow(ConfigFlow, domain=DOMAIN):
         if user_input is not None:
             if not user_input.get(CONF_PASSWORD):
                 user_input[CONF_PASSWORD] = entry.data[CONF_PASSWORD]
+            if CONF_TAN_MEDIUM in user_input:
+                user_input[CONF_TAN_MEDIUM] = user_input[CONF_TAN_MEDIUM].strip()
             merged = {**entry.data, **user_input}
 
             try:
@@ -255,7 +365,19 @@ class FinTSConfigFlow(ConfigFlow, domain=DOMAIN):
         defaults = entry.data
         return self.async_show_form(
             step_id="reconfigure",
-            data_schema=_credentials_schema(defaults, pin_required=False),
+            data_schema=vol.Schema(
+                {
+                    **_credentials_schema(defaults, pin_required=False).schema,
+                    vol.Optional(
+                        CONF_TAN_MECHANISM,
+                        default=defaults.get(CONF_TAN_MECHANISM, ""),
+                    ): TextSelector(),
+                    vol.Optional(
+                        CONF_TAN_MEDIUM,
+                        default=defaults.get(CONF_TAN_MEDIUM, ""),
+                    ): TextSelector(),
+                }
+            ),
             errors=errors,
         )
 

@@ -49,6 +49,7 @@ The integration is configured from the Home Assistant UI:
    - **PIN** — your online banking PIN
    - **FinTS endpoint URL** — your bank's FinTS server (e.g. `https://fints.ing.de/fints`)
    - **Product ID** — your registered FinTS product ID (Produktkennung)
+   - **TAN medium** — optional TAN device/media name when required by the bank (for example Norisbank may expose a single medium like `zf10`)
    - **Name** — optional display name (defaults to the BLZ)
 
 ## Common FinTS endpoints
@@ -58,6 +59,7 @@ The integration is configured from the Home Assistant UI:
 | ING | 50010517 | `https://fints.ing.de/fints` |
 | Deutsche Bank | 20070000 | `https://meine.deutsche-bank.de/pfpd` |
 | Commerzbank | 20040000 | `https://fints.commerzbank.de/` |
+| norisbank | 10077777 | `https://fints.norisbank.de` |
 | Sparkasse (varies) | — | check your Sparkasse's website |
 
 ## Entity model

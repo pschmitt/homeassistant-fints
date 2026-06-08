@@ -7,7 +7,15 @@ from homeassistant.const import CONF_PASSWORD, CONF_USERNAME
 from homeassistant.core import HomeAssistant
 
 from .api import FinTSApiClient
-from .const import CONF_BLZ, CONF_ENDPOINT, CONF_PRODUCT_ID, DOMAIN, PLATFORMS
+from .const import (
+    CONF_BLZ,
+    CONF_ENDPOINT,
+    CONF_PRODUCT_ID,
+    CONF_TAN_MECHANISM,
+    CONF_TAN_MEDIUM,
+    DOMAIN,
+    PLATFORMS,
+)
 from .coordinator import FinTSCoordinator
 
 
@@ -19,6 +27,8 @@ async def async_setup_entry(hass: HomeAssistant, config_entry: ConfigEntry) -> b
         pin=config_entry.data[CONF_PASSWORD],
         endpoint=config_entry.data[CONF_ENDPOINT],
         product_id=config_entry.data[CONF_PRODUCT_ID],
+        tan_mechanism=config_entry.data.get(CONF_TAN_MECHANISM),
+        tan_medium=config_entry.data.get(CONF_TAN_MEDIUM),
     )
     coordinator = FinTSCoordinator(hass, client, config_entry)
     await coordinator.async_config_entry_first_refresh()

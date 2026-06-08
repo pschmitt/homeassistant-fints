@@ -13,3 +13,7 @@ class FinTSAuthError(FinTSIntegrationError):
 
 class FinTSConnectionError(FinTSIntegrationError):
     """Raised when a network or protocol error occurs."""
+
+
+class FinTSTanRequiredError(FinTSIntegrationError):
+    """Raised when the bank requires an interactive TAN/SCA step."""

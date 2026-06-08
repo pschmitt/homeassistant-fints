@@ -25,6 +25,14 @@
           "product_id": "Your registered FinTS product ID. Must be obtained from your bank."
         }
       },
+      "auth": {
+        "title": "Authentication method",
+        "description": "Choose the TAN mechanism for this bank. If your bank exposes TAN device/media names, you can select one here; otherwise enter it manually when required.",
+        "data": {
+          "tan_mechanism": "TAN mechanism",
+          "tan_medium": "TAN medium / device name"
+        }
+      },
       "reconfigure": {
         "title": "Reconfigure FinTS connection",
         "description": "Update the connection settings. Leave PIN empty to keep the current one.",
@@ -33,7 +41,9 @@
           "username": "Username / Customer number",
           "password": "PIN",
           "endpoint": "FinTS endpoint URL",
-          "product_id": "Product ID (Produktkennung)"
+          "product_id": "Product ID (Produktkennung)",
+          "tan_mechanism": "TAN mechanism",
+          "tan_medium": "TAN medium / device name"
         }
       }
     },
@@ -64,6 +74,10 @@
     "auth_failed": {
       "title": "FinTS authentication failed for {bank_name}",
       "description": "Home Assistant could not log in to **{bank_name}** via FinTS.\n\nPossible causes:\n\n1. **Stale web session**: Some banks (e.g. ING) periodically require you to log into their web portal before FinTS access is re-enabled. Visit your bank's website, log in, then reload this integration.\n2. **Changed PIN**: If you recently changed your online banking PIN, use **Reconfigure** to update it.\n\nAfter resolving the issue, go to **Settings → Devices & services → {bank_name}** and select **Reload**."
+    },
+    "sca_required": {
+      "title": "FinTS approval required for {bank_name}",
+      "description": "Home Assistant could not complete the FinTS update for **{bank_name}** because the bank requires an interactive TAN / SCA approval.\n\nPossible causes:\n\n1. **Pending app approval**: Open your bank's TAN app and approve the request if one is waiting.\n2. **Fresh PSD2 step required**: Some banks require a new approval after changes to security settings or after a certain time.\n3. **External-banking approval missing**: The bank may require you to confirm FinTS / external banking access once in the web portal or app.\n\nAfter approving the request, go to **Settings → Devices & services → {bank_name}** and select **Reload**."
     }
   }
 }
