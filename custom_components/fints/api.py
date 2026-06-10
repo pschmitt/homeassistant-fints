@@ -46,9 +46,14 @@ class FinTSAccountData:
     @property
     def iban_masked(self) -> str:
         """Return IBAN with middle digits masked."""
-        if len(self.iban) < 8:
-            return self.iban
-        return f"{self.iban[:4]} **** **** {self.iban[-4:]}"
+        return _mask_iban(self.iban)
+
+
+def _mask_iban(iban: str) -> str:
+    """Mask the middle digits of an IBAN for log/display output."""
+    if len(iban) < 8:
+        return iban
+    return f"{iban[:4]} **** **** {iban[-4:]}"
 
 
 def _serialize_transaction(txn: Any) -> dict[str, Any]:
@@ -318,10 +323,12 @@ class FinTSApiClient:
                     except Exception as exc:
                         if isinstance(exc, FinTSTanRequiredError):
                             raise
-                        _LOGGER.warning("Failed to get balance for %s: %s", acc.iban, exc)
+                        _LOGGER.warning(
+                            "Failed to get balance for %s: %s", _mask_iban(acc.iban), exc
+                        )
                         continue
                     if balance is None:
-                        _LOGGER.warning("No balance returned for %s", acc.iban)
+                        _LOGGER.warning("No balance returned for %s", _mask_iban(acc.iban))
                         continue
 
                     new_balance = balance.amount.amount
@@ -335,14 +342,14 @@ class FinTSApiClient:
                         _LOGGER.debug(
                             "Fetched %d transactions for %s (balance_changed=%s)",
                             len(transactions),
-                            acc.iban,
+                            _mask_iban(acc.iban),
                             balance_changed,
                         )
                     else:
                         transactions = prev_acc.transactions
                         _LOGGER.debug(
                             "Balance unchanged for %s, reusing %d cached transactions",
-                            acc.iban,
+                            _mask_iban(acc.iban),
                             len(transactions),
                         )
 
@@ -380,7 +387,9 @@ class FinTSApiClient:
         except FinTSTanRequiredError:
             raise
         except Exception as exc:
-            _LOGGER.warning("Failed to get transactions for %s: %s", acc.iban, exc)
+            _LOGGER.warning(
+                "Failed to get transactions for %s: %s", _mask_iban(acc.iban), exc
+            )
             return []
 
     def fetch_accounts_and_balances(self) -> dict[str, FinTSAccountData]:
