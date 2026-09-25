@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
@@ -24,6 +25,14 @@ _TAN_MECHANISM_LABELS = {
     "921": "BestSign Push",
     "922": "BestSign SMS",
 }
+# Some banks prepend the counterparty IBAN (or legacy account number) to the
+# applicant name without a separator, e.g. "DE92500105175437945609Jane Doe".
+_IBAN_LENGTHS = {
+    "AT": 20, "BE": 16, "CH": 21, "CZ": 24, "DE": 22, "DK": 18, "ES": 24,
+    "FI": 18, "FR": 27, "GB": 22, "IE": 22, "IT": 27, "LI": 21, "LU": 20,
+    "NL": 18, "NO": 15, "PL": 28, "PT": 25, "SE": 24,
+}
+_ACCOUNT_NUMBER_PREFIX = re.compile(r"^(\d{6,10})(?=\D)")
 
 
 @dataclass
@@ -56,6 +65,19 @@ def _mask_iban(iban: str) -> str:
     return f"{iban[:4]} **** **** {iban[-4:]}"
 
 
+def _split_applicant(name: str, iban: str) -> tuple[str, str]:
+    """Split a counterparty IBAN/account number glued onto the applicant name."""
+    name = name.strip()
+    if iban and name.startswith(iban):
+        return name[len(iban) :].strip(), iban
+    length = _IBAN_LENGTHS.get(name[:2])
+    if length and len(name) > length and re.fullmatch(r"[A-Z]{2}\d{2}[A-Z0-9]+", name[:length]):
+        return name[length:].strip(), name[:length]
+    if match := _ACCOUNT_NUMBER_PREFIX.match(name):
+        return name[match.end() :].strip(), match.group(1)
+    return name, iban
+
+
 def _serialize_transaction(txn: Any) -> dict[str, Any]:
     """Convert an mt940/fints Transaction object to a JSON-serializable dict."""
     data: dict[str, Any] = txn.data if hasattr(txn, "data") else {}
@@ -74,11 +96,17 @@ def _serialize_transaction(txn: Any) -> dict[str, Any]:
     date_val = data.get("date")
     date_str = date_val.isoformat() if hasattr(date_val, "isoformat") else str(date_val or "")
 
+    applicant_name, applicant_iban = _split_applicant(
+        str(data.get("applicant_name") or ""),
+        str(data.get("applicant_iban") or ""),
+    )
+
     return {
         "date": date_str,
         "amount": round(amount_val, 2),
         "currency": currency,
-        "applicant_name": str(data.get("applicant_name") or ""),
+        "applicant_name": applicant_name,
+        "applicant_iban": applicant_iban,
         "purpose": str(data.get("purpose") or ""),
         "posting_text": str(data.get("posting_text") or ""),
     }
