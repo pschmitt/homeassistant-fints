@@ -449,9 +449,7 @@ class FinTSApiClient:
         except FinTSTanRequiredError:
             raise
         except Exception as exc:
-            _LOGGER.warning(
-                "Failed to get transactions for %s: %s", _mask_iban(acc.iban), exc
-            )
+            _LOGGER.warning("Failed to get transactions for %s: %s", _mask_iban(acc.iban), exc)
             return []
 
     def fetch_accounts_and_balances(self) -> dict[str, FinTSAccountData]:

@@ -153,7 +153,7 @@ def main() -> None:
             continue
 
         try:
-            with client._get_dialog() as dialog:
+            with client._get_dialog():
                 hksal_cls = client._find_highest_supported_command(HKSAL5, HKSAL6, HKSAL7)
                 seg = hksal_cls(
                     account=hksal_cls._fields["account"].type.from_sepa_account(accounts[0]),

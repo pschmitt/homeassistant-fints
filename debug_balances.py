@@ -44,7 +44,9 @@ def main() -> None:
     )
     parser.add_argument("--endpoint", required=True, help="FinTS endpoint URL")
     parser.add_argument("--product-id", required=True, help="FinTS product ID (Produktkennung)")
-    parser.add_argument("--tan-medium", help="Explicit TAN medium/device name if the bank requires one")
+    parser.add_argument(
+        "--tan-medium", help="Explicit TAN medium/device name if the bank requires one"
+    )
     parser.add_argument("--pin", help="PIN (prompted interactively if omitted)")
     args = parser.parse_args()
 

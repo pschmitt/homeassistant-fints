@@ -3,11 +3,10 @@
 from __future__ import annotations
 
 import logging
-from typing import Any
 from functools import partial
+from typing import Any
 
 import voluptuous as vol
-
 from homeassistant.config_entries import ConfigEntry, ConfigFlow, ConfigFlowResult, OptionsFlow
 from homeassistant.const import CONF_NAME, CONF_PASSWORD, CONF_SCAN_INTERVAL, CONF_USERNAME
 from homeassistant.core import HomeAssistant, callback
@@ -31,8 +30,8 @@ from .const import (
     CONF_TAN_MECHANISM,
     CONF_TAN_MEDIUM,
     DEFAULT_SCAN_INTERVAL,
-    MIN_SCAN_INTERVAL,
     DOMAIN,
+    MIN_SCAN_INTERVAL,
 )
 from .exceptions import FinTSAuthError, FinTSConnectionError
 
@@ -84,10 +83,7 @@ BANK_PRESETS: dict[str, dict[str, str]] = {
     },
 }
 
-PRESET_OPTIONS = [
-    {"value": key, "label": info["name"]}
-    for key, info in BANK_PRESETS.items()
-]
+PRESET_OPTIONS = [{"value": key, "label": info["name"]} for key, info in BANK_PRESETS.items()]
 PRESET_OPTIONS.sort(key=lambda option: option["label"].casefold())
 
 
@@ -129,8 +125,12 @@ def _credentials_schema(
             TextSelectorConfig(type=TextSelectorType.PASSWORD)
         )
     if show_endpoint:
-        fields[vol.Required(CONF_ENDPOINT, default=defaults.get(CONF_ENDPOINT, ""))] = TextSelector()
-    fields[vol.Required(CONF_PRODUCT_ID, default=defaults.get(CONF_PRODUCT_ID, ""))] = TextSelector()
+        fields[vol.Required(CONF_ENDPOINT, default=defaults.get(CONF_ENDPOINT, ""))] = (
+            TextSelector()
+        )
+    fields[vol.Required(CONF_PRODUCT_ID, default=defaults.get(CONF_PRODUCT_ID, ""))] = (
+        TextSelector()
+    )
     return vol.Schema(fields)
 
 
@@ -155,9 +155,7 @@ class FinTSConfigFlow(ConfigFlow, domain=DOMAIN):
         """Return the options flow for this handler."""
         return FinTSOptionsFlow(config_entry)
 
-    async def async_step_user(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_user(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Step 1: pick a bank preset (or custom)."""
         if user_input is not None:
             preset_key = user_input[CONF_BANK_PRESET]
@@ -191,7 +189,8 @@ class FinTSConfigFlow(ConfigFlow, domain=DOMAIN):
                 CONF_BLZ: user_input.get(CONF_BLZ) or self._preset_data.get(CONF_BLZ, ""),
                 CONF_USERNAME: user_input[CONF_USERNAME],
                 CONF_PASSWORD: user_input[CONF_PASSWORD],
-                CONF_ENDPOINT: user_input.get(CONF_ENDPOINT) or self._preset_data.get(CONF_ENDPOINT, ""),
+                CONF_ENDPOINT: user_input.get(CONF_ENDPOINT)
+                or self._preset_data.get(CONF_ENDPOINT, ""),
                 CONF_PRODUCT_ID: user_input[CONF_PRODUCT_ID],
             }
             self._pending_title = (
@@ -250,9 +249,7 @@ class FinTSConfigFlow(ConfigFlow, domain=DOMAIN):
             errors=errors,
         )
 
-    async def async_step_auth(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_auth(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Step 3: choose TAN mechanism and optional medium."""
         errors: dict[str, str] = {}
 
@@ -389,9 +386,7 @@ class FinTSOptionsFlow(OptionsFlow):
         """Initialize the options flow."""
         self._config_entry = config_entry
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> ConfigFlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> ConfigFlowResult:
         """Manage FinTS options."""
         if user_input is not None:
             return self.async_create_entry(title="", data=user_input)

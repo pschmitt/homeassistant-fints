@@ -53,9 +53,7 @@ class FinTSCoordinator(DataUpdateCoordinator[dict[str, FinTSAccountData]]):
         """Fetch account balances and transactions from the bank."""
         previous = self.data
         try:
-            data = await self.hass.async_add_executor_job(
-                self.client.fetch_data, previous
-            )
+            data = await self.hass.async_add_executor_job(self.client.fetch_data, previous)
         except FinTSTanRequiredError as err:
             ir.async_delete_issue(
                 self.hass,
@@ -71,9 +69,7 @@ class FinTSCoordinator(DataUpdateCoordinator[dict[str, FinTSAccountData]]):
                 translation_key=REPAIR_SCA_REQUIRED,
                 translation_placeholders={"bank_name": self.bank_name},
             )
-            raise UpdateFailed(
-                f"TAN/SCA approval required for {self.bank_name}: {err}"
-            ) from err
+            raise UpdateFailed(f"TAN/SCA approval required for {self.bank_name}: {err}") from err
         except FinTSAuthError as err:
             ir.async_delete_issue(
                 self.hass,

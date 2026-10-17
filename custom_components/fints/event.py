@@ -102,7 +102,7 @@ def _latest_transaction(account: FinTSAccountData) -> dict | None:
     """Return the most recently booked transaction for one account."""
     best: dict | None = None
     best_date = ""
-    for tx in (account.transactions or []):
+    for tx in account.transactions or []:
         date = tx.get("date") or ""
         if date > best_date:
             best_date = date
