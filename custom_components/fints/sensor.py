@@ -28,7 +28,7 @@ async def async_setup_entry(
     @callback
     def async_add_missing_entities() -> None:
         new_entities: list[SensorEntity] = []
-        for iban, account in coordinator.data.items():
+        for iban, account in (coordinator.data or {}).items():
             if iban in known_ibans:
                 continue
             known_ibans.add(iban)
