@@ -178,9 +178,11 @@ class FinTSApiClient:
             self._pin,
             self._endpoint,
             customer_id=self._username,
-            tan_medium=self._tan_medium or None,
             product_id=self._product_id,
         )
+        # The tan_medium constructor argument was only added in python-fints 4.2.4.
+        # Assign the client field directly to remain compatible with older releases.
+        client.selected_tan_medium = self._tan_medium or None
         client.fetch_tan_mechanisms()
         if self._tan_mechanism:
             client.set_tan_mechanism(self._tan_mechanism)
