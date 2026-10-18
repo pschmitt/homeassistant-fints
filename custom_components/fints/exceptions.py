@@ -11,6 +11,10 @@ class FinTSAuthError(FinTSIntegrationError):
     """Raised when authentication fails (wrong PIN or stale web session)."""
 
 
+class FinTSIngReauthRequiredError(FinTSAuthError):
+    """Raised when ING requires a fresh online banking login."""
+
+
 class FinTSConnectionError(FinTSIntegrationError):
     """Raised when a network or protocol error occurs."""
 

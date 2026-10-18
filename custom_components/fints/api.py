@@ -9,7 +9,12 @@ from datetime import date, timedelta
 from decimal import Decimal
 from typing import Any
 
-from .exceptions import FinTSAuthError, FinTSConnectionError, FinTSTanRequiredError
+from .exceptions import (
+    FinTSAuthError,
+    FinTSConnectionError,
+    FinTSIngReauthRequiredError,
+    FinTSTanRequiredError,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -368,8 +373,17 @@ class FinTSApiClient:
         previous run (or on the very first run). Otherwise the cached list
         from *previous* is carried forward, saving one expensive bank round-trip.
         """
+        response_codes: list[str] = []
         try:
             client = self._make_client()
+
+            def track_response(_segment: Any, response: Any) -> None:
+                response_codes.append(response.code)
+
+            # python-fints converts ING's 9942 response into a generic
+            # "PIN wrong?" exception. Retain only the response code so we can
+            # raise an actionable Home Assistant repair for this known case.
+            client.response_callbacks.append(track_response)
             with client:
                 info = client.get_information()
                 product_names: dict[str, str] = {
@@ -437,6 +451,10 @@ class FinTSApiClient:
 
             if isinstance(exc, (FinTSTanRequiredError, FinTSSCARequiredError)):
                 raise FinTSTanRequiredError(str(exc)) from exc
+            if self._blz == "50010517" and response_codes[-1:] == ["9942"]:
+                raise FinTSIngReauthRequiredError(
+                    "ING requires a fresh online banking login (FinTS response 9942)"
+                ) from exc
             if isinstance(exc, (FinTSClientPINError, FinTSClientTemporaryAuthError)):
                 raise FinTSAuthError(str(exc)) from exc
             raise FinTSConnectionError(str(exc)) from exc

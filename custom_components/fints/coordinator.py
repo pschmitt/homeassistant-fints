@@ -16,9 +16,15 @@ from .const import (
     DEFAULT_SCAN_INTERVAL,
     DOMAIN,
     REPAIR_AUTH_FAILED,
+    REPAIR_ING_REAUTH_REQUIRED,
     REPAIR_SCA_REQUIRED,
 )
-from .exceptions import FinTSAuthError, FinTSConnectionError, FinTSTanRequiredError
+from .exceptions import (
+    FinTSAuthError,
+    FinTSConnectionError,
+    FinTSIngReauthRequiredError,
+    FinTSTanRequiredError,
+)
 
 _LOGGER = logging.getLogger(__name__)
 
@@ -60,6 +66,11 @@ class FinTSCoordinator(DataUpdateCoordinator[dict[str, FinTSAccountData]]):
                 DOMAIN,
                 f"{REPAIR_AUTH_FAILED}_{self.config_entry.entry_id}",
             )
+            ir.async_delete_issue(
+                self.hass,
+                DOMAIN,
+                f"{REPAIR_ING_REAUTH_REQUIRED}_{self.config_entry.entry_id}",
+            )
             ir.async_create_issue(
                 self.hass,
                 DOMAIN,
@@ -70,11 +81,39 @@ class FinTSCoordinator(DataUpdateCoordinator[dict[str, FinTSAccountData]]):
                 translation_placeholders={"bank_name": self.bank_name},
             )
             raise UpdateFailed(f"TAN/SCA approval required for {self.bank_name}: {err}") from err
+        except FinTSIngReauthRequiredError as err:
+            ir.async_delete_issue(
+                self.hass,
+                DOMAIN,
+                f"{REPAIR_AUTH_FAILED}_{self.config_entry.entry_id}",
+            )
+            ir.async_delete_issue(
+                self.hass,
+                DOMAIN,
+                f"{REPAIR_SCA_REQUIRED}_{self.config_entry.entry_id}",
+            )
+            ir.async_create_issue(
+                self.hass,
+                DOMAIN,
+                f"{REPAIR_ING_REAUTH_REQUIRED}_{self.config_entry.entry_id}",
+                is_fixable=False,
+                severity=ir.IssueSeverity.ERROR,
+                translation_key=REPAIR_ING_REAUTH_REQUIRED,
+                translation_placeholders={"bank_name": self.bank_name},
+            )
+            raise UpdateFailed(
+                f"ING online banking login required for {self.bank_name}: {err}"
+            ) from err
         except FinTSAuthError as err:
             ir.async_delete_issue(
                 self.hass,
                 DOMAIN,
                 f"{REPAIR_SCA_REQUIRED}_{self.config_entry.entry_id}",
+            )
+            ir.async_delete_issue(
+                self.hass,
+                DOMAIN,
+                f"{REPAIR_ING_REAUTH_REQUIRED}_{self.config_entry.entry_id}",
             )
             ir.async_create_issue(
                 self.hass,
@@ -98,5 +137,10 @@ class FinTSCoordinator(DataUpdateCoordinator[dict[str, FinTSAccountData]]):
             self.hass,
             DOMAIN,
             f"{REPAIR_SCA_REQUIRED}_{self.config_entry.entry_id}",
+        )
+        ir.async_delete_issue(
+            self.hass,
+            DOMAIN,
+            f"{REPAIR_ING_REAUTH_REQUIRED}_{self.config_entry.entry_id}",
         )
         return data

@@ -71,6 +71,10 @@
     }
   },
   "issues": {
+    "ing_reauth_required": {
+      "title": "ING online banking login required",
+      "description": "ING has blocked FinTS access until you refresh your online banking authentication (response 9942). Log in to [ING online banking](https://banking.ing.de/) and complete any requested confirmation in the ING app. Then reload **{bank_name}** under **Settings → Devices & services**."
+    },
     "auth_failed": {
       "title": "FinTS authentication failed for {bank_name}",
       "description": "Home Assistant could not log in to **{bank_name}** via FinTS.\n\nPossible causes:\n\n1. **Stale web session**: Some banks (e.g. ING) periodically require you to log into their web portal before FinTS access is re-enabled. Visit your bank's website, log in, then reload this integration.\n2. **Changed PIN**: If you recently changed your online banking PIN, use **Reconfigure** to update it.\n\nAfter resolving the issue, go to **Settings → Devices & services → {bank_name}** and select **Reload**."
