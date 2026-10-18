@@ -72,8 +72,8 @@
   },
   "issues": {
     "ing_reauth_required": {
-      "title": "ING online banking login required",
-      "description": "ING has blocked FinTS access until you refresh your online banking authentication (response 9942). Log in to [ING online banking](https://banking.ing.de/) and complete any requested confirmation in the ING app. Then reload **{bank_name}** under **Settings → Devices & services**."
+      "title": "ING FinTS login needs attention",
+      "description": "ING rejected the FinTS login for **{bank_name}**. This often means ING needs a fresh online banking login. Log in to [ING online banking](https://banking.ing.de/) and complete any requested confirmation in the ING app, then reload this integration under **Settings → Devices & services → {bank_name}**. If it still fails, use **Reconfigure** to check the ING credentials."
     },
     "auth_failed": {
       "title": "FinTS authentication failed for {bank_name}",

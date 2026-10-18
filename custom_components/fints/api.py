@@ -454,9 +454,10 @@ class FinTSApiClient:
 
             if isinstance(exc, (FinTSTanRequiredError, FinTSSCARequiredError)):
                 raise FinTSTanRequiredError(str(exc)) from exc
-            if self._blz == "50010517" and response_codes[-1:] == ["9942"]:
+            if isinstance(exc, FinTSClientPINError) and self._blz == "50010517":
+                response_code = response_codes[-1] if response_codes else "unknown"
                 raise FinTSIngReauthRequiredError(
-                    "ING requires a fresh online banking login (FinTS response 9942)"
+                    f"ING rejected FinTS authentication (last response code: {response_code})"
                 ) from exc
             if isinstance(exc, (FinTSClientPINError, FinTSClientTemporaryAuthError)):
                 raise FinTSAuthError(str(exc)) from exc
