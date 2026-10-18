@@ -21,3 +21,8 @@ class FinTSConnectionError(FinTSIntegrationError):
 
 class FinTSTanRequiredError(FinTSIntegrationError):
     """Raised when the bank requires an interactive TAN/SCA step."""
+
+    def __init__(self, message: str, challenge_data: dict[str, str] | None = None) -> None:
+        """Initialize with resumable FinTS challenge state, when available."""
+        super().__init__(message)
+        self.challenge_data = challenge_data

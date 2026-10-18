@@ -81,7 +81,24 @@
     },
     "sca_required": {
       "title": "FinTS approval required for {bank_name}",
-      "description": "Home Assistant could not complete the FinTS update for **{bank_name}** because the bank requires an interactive TAN / SCA approval.\n\nPossible causes:\n\n1. **Pending app approval**: Open your bank's TAN app and approve the request if one is waiting.\n2. **Fresh PSD2 step required**: Some banks require a new approval after changes to security settings or after a certain time.\n3. **External-banking approval missing**: The bank may require you to confirm FinTS / external banking access once in the web portal or app.\n\nAfter approving the request, go to **Settings → Devices & services → {bank_name}** and select **Reload**."
+      "description": "Home Assistant received a TAN / SCA challenge from **{bank_name}**. If a **Fix** button is available, choose it to enter a TAN or continue an app approval. Otherwise, approve the request in your bank's app or web banking, then reload the integration.",
+      "fix_flow": {
+        "error": {
+          "invalid_tan": "The bank did not accept that response. Check the challenge and try again."
+        },
+        "step": {
+          "init": {
+            "data": {
+              "tan": "TAN"
+            },
+            "data_description": {
+              "tan": "Enter the TAN requested by your bank. The code is sent directly to the bank and is not stored."
+            },
+            "description": "Follow the bank's instructions below. If the request is waiting in your banking app, approve it there and continue without entering a code.\n\n{challenge}",
+            "title": "Complete bank security check"
+          }
+        }
+      }
     }
   }
 }

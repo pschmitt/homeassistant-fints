@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import logging
 import re
+from base64 import b64decode, b64encode
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
@@ -178,6 +179,10 @@ class FinTSApiClient:
     ):
         """Create and bootstrap a FinTS client."""
         from fints.client import FinTS3PinTanClient
+        from fints.client import NeedTANResponse
+
+        class _InitialTanChallenge(Exception):
+            """Stop bootstrap after preserving a TAN challenge during dialog init."""
 
         client = FinTS3PinTanClient(
             self._blz,
@@ -192,7 +197,33 @@ class FinTSApiClient:
         client.selected_tan_medium = self._tan_medium or None
         if response_callback is not None:
             client.response_callbacks.append(response_callback)
-        client.fetch_tan_mechanisms()
+
+        # Hibiscus handles TAN requests during dialog initialization as an
+        # interactive two step exchange. python-fints records that request on
+        # `init_tan_response`, but would otherwise close the dialog before an
+        # integration can pause and resume it. Intercept init while the dialog
+        # is still open so its state can be resumed from the repair flow.
+        new_dialog = client._new_dialog
+
+        def new_dialog_with_tan_capture(lazy_init: bool = False):
+            dialog = new_dialog(lazy_init=lazy_init)
+            dialog_init = dialog.init
+
+            def init_with_tan_capture(*extra_segments: Any):
+                response = dialog_init(*extra_segments)
+                if isinstance(client.init_tan_response, NeedTANResponse):
+                    client._fints_init_dialog_state = dialog.pause()
+                    raise _InitialTanChallenge
+                return response
+
+            dialog.init = init_with_tan_capture
+            return dialog
+
+        client._new_dialog = new_dialog_with_tan_capture
+        try:
+            client.fetch_tan_mechanisms()
+        except _InitialTanChallenge:
+            pass
         if self._tan_mechanism:
             client.set_tan_mechanism(self._tan_mechanism)
         return client
@@ -350,9 +381,13 @@ class FinTSApiClient:
 
     def _get_accounts(self, client, info: dict[str, Any]) -> list[Any]:
         """Get SEPA accounts, falling back to UPD metadata when HKSPA fails."""
+        from fints.exceptions import FinTSSCARequiredError
+
         try:
             accounts = client.get_sepa_accounts()
         except Exception as exc:
+            if isinstance(exc, FinTSSCARequiredError):
+                raise
             _LOGGER.warning("Falling back to UPD account data after HKSPA failure: %s", exc)
             accounts = self._accounts_from_information(info)
 
@@ -361,12 +396,17 @@ class FinTSApiClient:
         return self._accounts_from_information(info)
 
     @staticmethod
-    def _raise_if_retry_response(value: Any) -> None:
-        """Raise a dedicated integration error for interactive TAN/SCA responses."""
-        from fints.client import NeedRetryResponse
-
-        if isinstance(value, NeedRetryResponse):
-            raise FinTSTanRequiredError("Bank requires interactive TAN/SCA approval")
+    def _encode_tan_challenge(
+        challenge: Any, client_state: bytes, dialog_state: bytes
+    ) -> dict[str, str]:
+        """Serialize a python-fints challenge for a local HA repair flow."""
+        return {
+            "challenge_data": b64encode(challenge.get_data()).decode("ascii"),
+            "client_state": b64encode(client_state).decode("ascii"),
+            "dialog_state": b64encode(dialog_state).decode("ascii"),
+            "challenge": str(challenge.challenge or ""),
+            "decoupled": "true" if challenge.decoupled else "false",
+        }
 
     def fetch_data(
         self, previous: dict[str, FinTSAccountData] | None = None
@@ -378,12 +418,24 @@ class FinTSApiClient:
         from *previous* is carried forward, saving one expensive bank round-trip.
         """
         response_codes: list[str] = []
+        pending_tan: tuple[Any, bytes] | None = None
 
         def track_response(_segment: Any, response: Any) -> None:
             response_codes.append(response.code)
 
         try:
             client = self._make_client(track_response)
+            from fints.client import NeedTANResponse
+
+            if isinstance(client.init_tan_response, NeedTANResponse):
+                raise FinTSTanRequiredError(
+                    "Bank requires interactive TAN/SCA approval during dialog initialization",
+                    self._encode_tan_challenge(
+                        client.init_tan_response,
+                        client.deconstruct(),
+                        client._fints_init_dialog_state,
+                    ),
+                )
             # python-fints converts ING's 9942 response into a generic
             # "PIN wrong?" exception. Retain only the response code so we can
             # raise an actionable Home Assistant repair for this known case.
@@ -397,12 +449,19 @@ class FinTSApiClient:
                 sepa_accounts = self._get_accounts(client, info)
                 result: dict[str, FinTSAccountData] = {}
 
-                for acc in sepa_accounts:
+                if isinstance(sepa_accounts, NeedTANResponse):
+                    pending_tan = (sepa_accounts, client.pause_dialog())
+
+                for acc in (sepa_accounts if not pending_tan else []):
                     try:
                         balance = client.get_balance(acc)
-                        self._raise_if_retry_response(balance)
+                        if isinstance(balance, NeedTANResponse):
+                            pending_tan = (balance, client.pause_dialog())
+                            break
                     except Exception as exc:
-                        if isinstance(exc, FinTSTanRequiredError):
+                        from fints.exceptions import FinTSSCARequiredError
+
+                        if isinstance(exc, (FinTSTanRequiredError, FinTSSCARequiredError)):
                             raise
                         _LOGGER.warning(
                             "Failed to get balance for %s: %s", _mask_iban(acc.iban), exc
@@ -420,6 +479,9 @@ class FinTSApiClient:
                     # already have some. Fetch when balance changed or cache empty.
                     if balance_changed or not (prev_acc and prev_acc.transactions):
                         transactions = self._fetch_transactions(client, acc)
+                        if isinstance(transactions, NeedTANResponse):
+                            pending_tan = (transactions, client.pause_dialog())
+                            break
                         _LOGGER.debug(
                             "Fetched %d transactions for %s (balance_changed=%s)",
                             len(transactions),
@@ -444,7 +506,17 @@ class FinTSApiClient:
                         transactions=transactions,
                     )
 
-                return result
+                    if pending_tan:
+                        break
+
+            if pending_tan:
+                challenge, dialog_state = pending_tan
+                raise FinTSTanRequiredError(
+                    "Bank requires interactive TAN/SCA approval",
+                    self._encode_tan_challenge(challenge, client.deconstruct(), dialog_state),
+                )
+
+            return result
         except Exception as exc:
             from fints.exceptions import (
                 FinTSClientPINError,
@@ -452,7 +524,9 @@ class FinTSApiClient:
                 FinTSSCARequiredError,
             )
 
-            if isinstance(exc, (FinTSTanRequiredError, FinTSSCARequiredError)):
+            if isinstance(exc, FinTSTanRequiredError):
+                raise
+            if isinstance(exc, FinTSSCARequiredError):
                 raise FinTSTanRequiredError(str(exc)) from exc
             if isinstance(exc, FinTSClientPINError) and self._blz == "50010517":
                 response_code = response_codes[-1] if response_codes else "unknown"
@@ -463,18 +537,58 @@ class FinTSApiClient:
                 raise FinTSAuthError(str(exc)) from exc
             raise FinTSConnectionError(str(exc)) from exc
 
-    def _fetch_transactions(self, client, acc) -> list[dict[str, Any]]:
+    def _fetch_transactions(self, client, acc) -> list[dict[str, Any]] | Any:
         """Fetch and serialize recent transactions for one account."""
+        from fints.exceptions import FinTSSCARequiredError
+
         try:
             start = date.today() - timedelta(days=_TRANSACTION_LOOKBACK_DAYS)
             raw = client.get_transactions(acc, start_date=start)
-            self._raise_if_retry_response(raw)
+            from fints.client import NeedTANResponse
+
+            if isinstance(raw, NeedTANResponse):
+                return raw
             return [_serialize_transaction(t) for t in raw]
-        except FinTSTanRequiredError:
+        except (FinTSTanRequiredError, FinTSSCARequiredError):
             raise
         except Exception as exc:
             _LOGGER.warning("Failed to get transactions for %s: %s", _mask_iban(acc.iban), exc)
             return []
+
+    @staticmethod
+    def resume_tan(
+        entry_data: dict[str, Any], challenge_data: dict[str, str], tan: str
+    ) -> dict[str, str] | None:
+        """Resume a paused python-fints dialog with a user-entered TAN."""
+        from fints.client import FinTS3PinTanClient, NeedRetryResponse, NeedTANResponse
+
+        client = FinTS3PinTanClient(
+            entry_data["blz"],
+            entry_data["username"],
+            entry_data["password"],
+            entry_data["endpoint"],
+            customer_id=entry_data["username"],
+            product_id=entry_data["product_id"],
+            from_data=b64decode(challenge_data["client_state"]),
+        )
+        client.selected_tan_medium = entry_data.get("tan_medium") or None
+        if entry_data.get("tan_mechanism"):
+            client.set_tan_mechanism(entry_data["tan_mechanism"])
+        challenge = NeedRetryResponse.from_data(b64decode(challenge_data["challenge_data"]))
+        dialog_state = b64decode(challenge_data["dialog_state"])
+
+        pending_tan = None
+        with client.resume_dialog(dialog_state):
+            response = client.send_tan(challenge, tan)
+            if isinstance(response, NeedTANResponse):
+                pending_tan = (response, client.pause_dialog())
+
+        if pending_tan:
+            next_challenge, next_dialog_state = pending_tan
+            return FinTSApiClient._encode_tan_challenge(
+                next_challenge, client.deconstruct(), next_dialog_state
+            )
+        return None
 
     def fetch_accounts_and_balances(self) -> dict[str, FinTSAccountData]:
         """Backward-compat alias — fetches balances only (no previous data)."""

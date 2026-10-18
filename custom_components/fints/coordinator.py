@@ -75,7 +75,12 @@ class FinTSCoordinator(DataUpdateCoordinator[dict[str, FinTSAccountData]]):
                 self.hass,
                 DOMAIN,
                 f"{REPAIR_SCA_REQUIRED}_{self.config_entry.entry_id}",
-                is_fixable=False,
+                data=(
+                    {"entry_id": self.config_entry.entry_id, **err.challenge_data}
+                    if err.challenge_data
+                    else None
+                ),
+                is_fixable=err.challenge_data is not None,
                 severity=ir.IssueSeverity.ERROR,
                 translation_key=REPAIR_SCA_REQUIRED,
                 translation_placeholders={"bank_name": self.bank_name},
