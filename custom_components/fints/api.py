@@ -7,7 +7,7 @@ import re
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any
+from typing import Any, Callable
 
 from .exceptions import (
     FinTSAuthError,
@@ -173,7 +173,9 @@ class FinTSApiClient:
         self._tan_mechanism = tan_mechanism
         self._tan_medium = tan_medium
 
-    def _make_client(self):
+    def _make_client(
+        self, response_callback: Callable[[Any, Any], None] | None = None
+    ):
         """Create and bootstrap a FinTS client."""
         from fints.client import FinTS3PinTanClient
 
@@ -188,6 +190,8 @@ class FinTSApiClient:
         # The tan_medium constructor argument was only added in python-fints 4.2.4.
         # Assign the client field directly to remain compatible with older releases.
         client.selected_tan_medium = self._tan_medium or None
+        if response_callback is not None:
+            client.response_callbacks.append(response_callback)
         client.fetch_tan_mechanisms()
         if self._tan_mechanism:
             client.set_tan_mechanism(self._tan_mechanism)
@@ -374,16 +378,15 @@ class FinTSApiClient:
         from *previous* is carried forward, saving one expensive bank round-trip.
         """
         response_codes: list[str] = []
+
+        def track_response(_segment: Any, response: Any) -> None:
+            response_codes.append(response.code)
+
         try:
-            client = self._make_client()
-
-            def track_response(_segment: Any, response: Any) -> None:
-                response_codes.append(response.code)
-
+            client = self._make_client(track_response)
             # python-fints converts ING's 9942 response into a generic
             # "PIN wrong?" exception. Retain only the response code so we can
             # raise an actionable Home Assistant repair for this known case.
-            client.response_callbacks.append(track_response)
             with client:
                 info = client.get_information()
                 product_names: dict[str, str] = {
