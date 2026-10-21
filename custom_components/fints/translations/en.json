@@ -73,7 +73,7 @@
   "issues": {
     "ing_reauth_required": {
       "title": "ING FinTS login needs attention",
-      "description": "ING rejected the FinTS login for **{bank_name}**. This often means ING needs a fresh online banking login. Log in to [ING online banking](https://banking.ing.de/) and complete any requested confirmation in the ING app, then reload this integration under **Settings → Devices & services → {bank_name}**. If it still fails, use **Reconfigure** to check the ING credentials."
+      "description": "ING rejected the FinTS login for **{bank_name}**. This often means ING needs a fresh online banking login. Log in to [ING online banking]({ing_url}) and complete any requested confirmation in the ING app, then reload this integration under **Settings → Devices & services → {bank_name}**. If it still fails, use **Reconfigure** to check the ING credentials."
     },
     "auth_failed": {
       "title": "FinTS authentication failed for {bank_name}",

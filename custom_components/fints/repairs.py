@@ -6,7 +6,6 @@ import logging
 from typing import Any
 
 import probatio
-
 from homeassistant.components.repairs import RepairsFlow, RepairsFlowResult
 from homeassistant.config_entries import ConfigEntry
 from homeassistant.core import HomeAssistant
@@ -27,9 +26,7 @@ class FinTSTanRepairFlow(RepairsFlow):
         super().__init__()
         self._repair_data = {key: str(value) for key, value in data.items() if value is not None}
 
-    async def async_step_init(
-        self, user_input: dict[str, Any] | None = None
-    ) -> RepairsFlowResult:
+    async def async_step_init(self, user_input: dict[str, Any] | None = None) -> RepairsFlowResult:
         """Ask for a TAN, or wait for approval in the bank app."""
         if user_input is not None:
             entry_id = self._repair_data["entry_id"]
@@ -66,9 +63,7 @@ class FinTSTanRepairFlow(RepairsFlow):
 
         return self._async_show_tan_form()
 
-    def _async_show_tan_form(
-        self, errors: dict[str, str] | None = None
-    ) -> RepairsFlowResult:
+    def _async_show_tan_form(self, errors: dict[str, str] | None = None) -> RepairsFlowResult:
         """Show the appropriate code-entry or decoupled approval form."""
         challenge = self._repair_data.get("challenge", "")
         schema = (

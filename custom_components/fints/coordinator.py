@@ -104,7 +104,10 @@ class FinTSCoordinator(DataUpdateCoordinator[dict[str, FinTSAccountData]]):
                 is_fixable=False,
                 severity=ir.IssueSeverity.ERROR,
                 translation_key=REPAIR_ING_REAUTH_REQUIRED,
-                translation_placeholders={"bank_name": self.bank_name},
+                translation_placeholders={
+                    "bank_name": self.bank_name,
+                    "ing_url": "https://banking.ing.de/",
+                },
             )
             raise UpdateFailed(
                 f"ING online banking login required for {self.bank_name}: {err}"

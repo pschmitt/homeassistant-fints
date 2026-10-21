@@ -5,10 +5,11 @@ from __future__ import annotations
 import logging
 import re
 from base64 import b64decode, b64encode
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from decimal import Decimal
-from typing import Any, Callable
+from typing import Any
 
 from .exceptions import (
     FinTSAuthError,
@@ -174,12 +175,9 @@ class FinTSApiClient:
         self._tan_mechanism = tan_mechanism
         self._tan_medium = tan_medium
 
-    def _make_client(
-        self, response_callback: Callable[[Any, Any], None] | None = None
-    ):
+    def _make_client(self, response_callback: Callable[[Any, Any], None] | None = None):
         """Create and bootstrap a FinTS client."""
-        from fints.client import FinTS3PinTanClient
-        from fints.client import NeedTANResponse
+        from fints.client import FinTS3PinTanClient, NeedTANResponse
 
         class _InitialTanChallenge(Exception):
             """Stop bootstrap after preserving a TAN challenge during dialog init."""
@@ -452,7 +450,7 @@ class FinTSApiClient:
                 if isinstance(sepa_accounts, NeedTANResponse):
                     pending_tan = (sepa_accounts, client.pause_dialog())
 
-                for acc in (sepa_accounts if not pending_tan else []):
+                for acc in sepa_accounts if not pending_tan else []:
                     try:
                         balance = client.get_balance(acc)
                         if isinstance(balance, NeedTANResponse):
