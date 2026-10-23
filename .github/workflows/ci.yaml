@@ -15,7 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
-      - uses: home-assistant/actions/hassfest@master
+      # Run every Hassfest validator; tolerate only the documented FinTS core-pin conflict.
+      - run: python3 scripts/hassfest.py
 
   ruff:
     name: Ruff

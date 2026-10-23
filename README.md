@@ -79,3 +79,11 @@ After setup, click **Configure** on the integration entry to adjust:
 ## Branding
 
 This repository bundles bank-related assets for display purposes. All integration code is GPL-3.0 licensed.
+
+### CI dependency exception
+
+This custom integration intentionally requires `fints>=4.2.4`, overriding the
+older library used by Home Assistant's built-in FinTS integration. CI runs all
+Hassfest validators and tolerates only the exact conflict with core's
+`fints==3.1.0` pin. Every other validation error still fails CI. The manifest
+keeps the required 4+ version; this exception does not change runtime dependencies.
