@@ -104,7 +104,7 @@ def _latest_transaction(account: FinTSAccountData) -> dict | None:
     best_date = ""
     for tx in account.transactions or []:
         date = tx.get("date") or ""
-        if date > best_date:
+        if date >= best_date:
             best_date = date
             best = tx
     return best
