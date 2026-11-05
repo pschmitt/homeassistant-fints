@@ -1,89 +1,44 @@
-# FinTS for Home Assistant
+<p align="center">
+  <img src="logo.png" width="128" alt="FinTS integration logo">
+</p>
 
-`fints` is a Home Assistant custom integration that connects to your bank via the [FinTS/HBCI](https://www.hbci-zka.de/) protocol and exposes account balances as sensor entities.
+<p align="center">
+  <a href="https://my.home-assistant.io/redirect/marketplace_repository/?owner=pschmitt&amp;repository=homeassistant-fints&amp;category=integration"><img src="https://my.home-assistant.io/badges/marketplace_repository.svg" alt="Open this integration in Home Assistant Marketplace"></a>
+</p>
 
-Features:
+<h1 align="center">FinTS for Home Assistant</h1>
 
-- supports multiple bank connections through config entries
-- creates one Home Assistant device per bank connection
-- creates one balance sensor per account (IBAN)
-- reconfigurable from the UI without restarting Home Assistant
-- raises a repair issue when authentication fails (e.g. stale web session)
+<p align="center">Read German bank account balances over FinTS/HBCI and expose them as Home Assistant sensors.</p>
 
-## Requirements
+## Features
 
-### FinTS product ID (Produktkennung)
+- **Multiple banks:** Configure separate connections, each represented by a Home Assistant device.
+- **Account balances:** Create one sensor per account IBAN, reporting the balance and currency.
+- **UI management:** Reconfigure connections and polling interval without editing YAML.
+- **Authentication repairs:** Raise a repair issue when a bank requires reauthentication. See [Bank setup](docs/bank-setup.md).
 
-Many German banks require a registered **FinTS product ID** before you can use third-party HBCI/FinTS clients. You must request one from your bank:
+## Install
 
-- **ING**: Register at the [ING developer portal](https://www.ing.de/baufinanzierung/ing-developer/) or via customer service.
-- **Other banks**: Check your bank's FinTS/HBCI documentation.
+Use the Marketplace badge above on Home Assistant 2026.11 or later to add this
+repository as a custom integration. On older versions, add it as a HACS
+custom repository of type **Integration**. Install and restart Home Assistant.
+The badge does not imply a public catalog listing. For manual installation,
+copy `custom_components/fints/` into Home Assistant's `custom_components/`
+directory and restart.
 
-### ING: periodic web re-authentication
+## Quick start
 
-ING periodically suspends FinTS access and requires you to log into [ing.de](https://www.ing.de) via browser to re-enable it. When this happens, the integration raises a repair issue in Home Assistant. Simply log into your ING account via the web, then reload the integration.
+1. Obtain a FinTS product ID if your bank requires one; see [Bank setup](docs/bank-setup.md).
+2. Add **FinTS** under **Settings → Devices & services → Add integration**.
+3. Enter your bank's BLZ, login, PIN, FinTS endpoint and product ID; set a TAN medium if needed.
+4. Inspect the resulting balance sensors.
 
-## Installation
+## Documentation
 
-### Home Assistant Marketplace
+| Topic | Description |
+|-------|-------------|
+| [Bank setup](docs/bank-setup.md) | Product IDs, reauthentication, endpoints and sensor details |
 
-[![Open this integration in Home Assistant Marketplace](https://my.home-assistant.io/badges/marketplace_repository.svg)](https://my.home-assistant.io/redirect/marketplace_repository/?owner=pschmitt&repository=homeassistant-fints&category=integration)
+## License
 
-1. Click the badge above to add this repository. For older installations, add `https://github.com/pschmitt/homeassistant-fints` to HACS as a custom repository of type **Integration**.
-2. Install **FinTS**.
-3. Restart Home Assistant.
-
-### Manual
-
-Copy `custom_components/fints` from this repository into your Home Assistant `custom_components/` directory, then restart.
-
-## Configuration
-
-The integration is configured from the Home Assistant UI:
-
-1. Go to **Settings → Devices & services**.
-2. Click **Add integration** and search for **FinTS**.
-3. Fill in:
-   - **BLZ** — your bank's 8-digit routing number (e.g. `50010517` for ING)
-   - **Username / Customer number** — your online banking login
-   - **PIN** — your online banking PIN
-   - **FinTS endpoint URL** — your bank's FinTS server (e.g. `https://fints.ing.de/fints`)
-   - **Product ID** — your registered FinTS product ID (Produktkennung)
-   - **TAN medium** — optional TAN device/media name when required by the bank (for example Norisbank may expose a single medium like `zf10`)
-   - **Name** — optional display name (defaults to the BLZ)
-
-## Common FinTS endpoints
-
-| Bank | BLZ | Endpoint |
-|------|-----|----------|
-| ING | 50010517 | `https://fints.ing.de/fints` |
-| Deutsche Bank | 20070000 | `https://meine.deutsche-bank.de/pfpd` |
-| Commerzbank | 20040000 | `https://fints.commerzbank.de/` |
-| norisbank | 10077777 | `https://fints.norisbank.de` |
-| Sparkasse (varies) | — | check your Sparkasse's website |
-
-## Entity model
-
-- **Device**: one per configured bank connection
-- **Entity**: one `sensor` per account IBAN
-- **State**: the current account balance (e.g. `179.29`)
-- **Unit**: the account currency (e.g. `EUR`)
-- **Attributes**: `iban`, `bic`, `account_number`
-
-## Options
-
-After setup, click **Configure** on the integration entry to adjust:
-
-- **Update interval** — how often to poll (default: 3600 s / 1 hour, minimum: 300 s)
-
-## Branding
-
-This repository bundles bank-related assets for display purposes. All integration code is GPL-3.0 licensed.
-
-### CI dependency exception
-
-This custom integration intentionally requires `fints>=4.2.4`, overriding the
-older library used by Home Assistant's built-in FinTS integration. CI runs all
-Hassfest validators and tolerates only the exact conflict with core's
-`fints==3.1.0` pin. Every other validation error still fails CI. The manifest
-keeps the required 4+ version; this exception does not change runtime dependencies.
+[GPL-3.0](LICENSE). Bank-related assets remain the property of their owners.
